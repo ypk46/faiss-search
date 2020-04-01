@@ -4,20 +4,8 @@ from utils.featurizer import Featurizer
 from utils.faiss_helper import FaissHelper
 
 
-def create(path: str):
-    # Init Faiss and Featurizer
+def add_from_dir(path: str, featurizer, faiss):
     _id = 1
-    featurizer = Featurizer()
-    faiss = FaissHelper(128, "IDMap,Flat")
-
-    # Default path for saving index and ref
-    index_path = "assets/index"
-    ref_path = "assets/ref"
-
-    # Create directory if not exist
-    if not os.path.exists("assets"):
-        os.makedirs("assets")
-
     for filename in os.listdir(path):
         # Create vector from image
         img_path = os.path.join(path, filename)
@@ -31,23 +19,58 @@ def create(path: str):
         faiss.add_vector(vector, ref, _id)
         _id += 1
 
-    faiss.save_index(index_path)
-    faiss.save_reference(ref_path)
+    return faiss
 
 
-def search(path: str):
+def create(path: str, index_path: str, ref_path: str):
     # Init Faiss and Featurizer
     featurizer = Featurizer()
     faiss = FaissHelper(128, "IDMap,Flat")
 
-    # Default path for loading index and ref
-    index_path = "assets/index"
-    ref_path = "assets/ref"
+    # Add vectors from directory
+    faiss = add_from_dir(path, featurizer, faiss)
+
+    # Persist index and ref
+    faiss.save_index(index_path)
+    faiss.save_reference(ref_path)
+
+
+def update(path: str, index_path: str, ref_path: str, is_dir: bool = False):
+    # Init Faiss and Featurizer
+    featurizer = Featurizer()
+    faiss = FaissHelper(128, "IDMap,Flat")
 
     # Load saved index and ref
     faiss.load_index(index_path)
     faiss.load_ref(ref_path)
-    print(faiss.index.ntotal)
+
+    if is_dir:
+        # Add vectors from directory
+        faiss = add_from_dir(path, featurizer, faiss)
+    else:
+        _id = max(faiss.reference.keys()) + 1
+        # Get vectors from file
+        vector = featurizer.get_features(path)
+        ref = (path.split("/")[-1], vector)
+
+        # Add vectors to index
+        print("Adding {} to Faiss index...".format(path.split("/")[-1]))
+        faiss.add_vector(vector, ref, _id)
+
+    # Persist index and ref
+    faiss.save_index(index_path)
+    faiss.save_reference(ref_path)
+
+
+def search(path: str, index_path: str, ref_path: str):
+    # Init Faiss and Featurizer
+    featurizer = Featurizer()
+    faiss = FaissHelper(128, "IDMap,Flat")
+
+    # Load saved index and ref
+    faiss.load_index(index_path)
+    faiss.load_ref(ref_path)
+
     # Get query feature vector(s)
     query_features = featurizer.get_features(path)
 
@@ -74,11 +97,30 @@ if __name__ == "__main__":
         help="Create a new index based on files in the specified directory",
     )
 
+    parser.add_argument(
+        "-u",
+        "--update",
+        action="store_true",
+        help="Create a new index based on files in the specified directory",
+    )
+
+    parser.add_argument(
+        "-i", "--index", required=True, help="Path to an existing index",
+    )
+
+    parser.add_argument(
+        "-r", "--reference", required=True, help="Path to an existing reference",
+    )
+
     args = parser.parse_args()
     path = args.Path
+    index_path = args.index
+    ref_path = args.reference
 
     # Check if it is a create or search operation
     if args.create:
-        create(path)
+        create(path, index_path, ref_path)
+    elif args.update:
+        update(path, index_path, ref_path, os.path.isdir(path))
     else:
-        search(path)
+        search(path, index_path, ref_path)

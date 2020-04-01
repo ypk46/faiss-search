@@ -33,17 +33,31 @@ class FaissHelper:
         ref_file.close()
 
     def add_vector(self, feature_vector, ref: tuple, _id: int):
-        # Store the object reference
-        self.reference.update({_id: ref})
 
-        # Generate id matrix
         vector_x, vector_y = feature_vector.shape
-        ids = np.linspace(_id, _id, num=vector_x, dtype="int64")
 
         # Check matching dimensions
-        if vector_y == self.dim:
+        if vector_y == self.dim and not self.is_duplicate(feature_vector):
+            # Generate id matrix
+            ids = np.linspace(_id, _id, num=vector_x, dtype="int64")
+
+            # Store the object reference
+            self.reference.update({_id: ref})
+
             # Add vector(s) with id
             self.index.add_with_ids(feature_vector, ids)
+        else:
+            print("Image is duplicate or have a mismatch feature dimension")
+
+    def is_duplicate(self, feature_vector):
+        distances, neighbors = self.index.search(feature_vector, k=1)
+        x, y = neighbors.shape
+
+        for i in range(x):
+            distances_list = distances[i].tolist()
+            if distances_list[0] != 0:
+                return False
+        return True
 
     def search(self, query, k: int = 5):
         # Get distance and closest neighbors
